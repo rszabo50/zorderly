@@ -4,6 +4,16 @@ A Swift/macOS menu bar proof of concept for the focus boundary in [FEASIBILITY.m
 
 Licensed under the [MIT License](LICENSE).
 
+## Homebrew preview
+
+On Apple Silicon with macOS 13 or later, install the unnotarized `v0.1.0` preview from the [ZOrderly tap](https://github.com/rszabo50/homebrew-zorderly):
+
+```sh
+brew install --cask rszabo50/zorderly/zorderly
+```
+
+This is a third-party tap. The cask checks the release archive's SHA-256 and installs the app into Applications. macOS may require first-launch approval in Privacy & Security and Accessibility access for focus behavior. The preview is not eligible for Homebrew's official cask repository.
+
 ## GitHub Actions and releases
 
 The **Build** workflow compiles and verifies an ad hoc signed app on pushes to `main` and pull requests. A version tag such as `v0.1.0` identifies the source for a release. Both release workflows run manually from GitHub Actions and target Apple Silicon only.
