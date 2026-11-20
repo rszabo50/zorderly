@@ -1,0 +1,56 @@
+# Alternative Window Management for macOS: Feasibility Assessment
+
+**Assessment date:** 2026-11-19
+
+**Status:** Research plus a compiled, live-tested focus probe. Region management and broader app testing have not been implemented.
+
+**Live probe finding (2026-11-19):** With yabai removed and Accessibility trusted, the user observed that the probe's explicit app activation raised each window on pointer entry. A revised mode that requested only the AX focused-window attribute left a lower window without keyboard focus. These observations rule out **those public-API focus strategies**, not the feature itself. Yabai 7.1.25 implements autofocus without raising through private `_SLPSSetFrontProcessWithOptions` and `SLPSPostEventRecordTo` calls plus synthesized key-window events. An experimental equivalent is now in this repository; cross-app behavior has not yet been validated. Click-to-focus without raise remains a separate question. [Yabai implementation](https://github.com/asmvik/yabai/blob/v7.1.25/src/window_manager.c#L1147-L1207), [Yabai autofocus documentation](https://github.com/asmvik/yabai/wiki/Configuration)
+
+**Click policy clarified:** content-area clicks must deliver their normal application action and keyboard focus without raising the window; border/title-bar clicks may raise it. Public AppKit methods such as `preventWindowOrdering()` are invoked by the receiving app for its own mouse-down handling, so they do not establish a system-wide policy for unrelated native apps. A cross-app event-routing experiment must preserve paired down/up events, coordinates, modifiers, drag behavior, and the app's normal click result before it can be considered viable. [Apple window-ordering API](https://developer.apple.com/documentation/appkit/nsapplication/preventwindowordering()), [AppKit event handling](https://developer.apple.com/documentation/appkit/event-handling)
+
+## Executive conclusion
+
+A single, user-space policy service can deliver configurable display regions, placement, resize, and restoration. Supported APIs alone did not deliver the required focus-without-raise behavior in our initial test. Yabai demonstrates a private-API path for autofocus without raising; therefore the product architecture must evaluate that path and its version sensitivity before deciding feasibility. It cannot become a supported replacement for WindowServer or enforce identical editing semantics inside every app. Click-to-focus without auto-raise needs its own test, because normal mouse-down handling may reorder windows.
+
+## Capability assessment
+
+| Requirement | Public API path | Feasibility and limit |
+| --- | --- | --- |
+| Discover windows and pointer target | `CGWindowListCopyWindowInfo` for window metadata; `AXUIElementCopyElementAtPosition` for topmost accessible element | Feasible for many ordinary windows. AX hit-testing follows visible z-order; unsupported or unresponsive apps can return errors. [Window list](https://developer.apple.com/documentation/coregraphics/cgwindowlistcopywindowinfo(_:_:)), [AX hit-testing](https://developer.apple.com/documentation/applicationservices/1462077-axuielementcopyelementatposition) |
+| Move and resize other apps' windows | Accessibility `AXUIElementSetAttributeValue` for position and size, after checking settable attributes | Feasible when the target app exposes and permits those attributes; not a guarantee for every window or custom UI. Requires user-granted Accessibility access. [AX API](https://developer.apple.com/documentation/applicationservices/axuielement_h), [trust check](https://developer.apple.com/documentation/applicationservices/1459186-axisprocesstrustedwithoptions) |
+| Focus follows pointer | Observe pointer movement, hit-test, request app activation and focused window | Partially feasible. Cross-app keyboard focus generally requires app activation. Since macOS Sonoma, activation is a request the system may decline; the former ignore-other-apps option is ignored. Measure whether setting AX focus changes ordering in each case. [Apple activation guidance](https://developer.apple.com/videos/play/wwdc2023/10054/), [focused-window attribute](https://developer.apple.com/documentation/applicationservices/carbon_accessibility/attributes) |
+| Focus without raising, including **click-to-focus without auto-raise**; independent stacking | No public, general cross-app window-ordering controller | **Cannot be guaranteed.** AppKit's ordering methods act on an app's own `NSWindow` objects; even `orderFrontRegardless` is an owning-app method. Activation and the app's normal mouse-down handling may bring windows forward. AX focus attributes are requests to another app, not authority over WindowServer stacking. [AppKit window ordering](https://developer.apple.com/documentation/appkit/nswindow/orderfrontregardless()), [activation options](https://developer.apple.com/documentation/appkit/nsapplication/activationoptions) |
+| Logical regions and region maximize | Compute regions from `NSScreen.visibleFrame`; apply frames through AX | Feasible as **virtual regions**, not OS displays. A region maximize is a managed resize, distinct from the app's native full-screen mode. Apps may impose minimum sizes or change their own frames later. [Visible frame](https://developer.apple.com/documentation/appkit/nsscreen/visibleframe), [full-screen behavior](https://developer.apple.com/documentation/appkit/nswindow/stylemask-swift.struct/fullscreen) |
+| Display-change restoration | Core Graphics display reconfiguration callback; workspace Space-change notification; persisted placement rules | Feasible on a best-effort basis. Re-enumerate displays and windows after changes; match windows by app identity plus available AX metadata, not transient window IDs alone. Restoration cannot promise an exact document/window match when an app does not expose stable identity. [Display callback](https://developer.apple.com/documentation/coregraphics/cgdisplayreconfigurationcallback), [Space notification](https://developer.apple.com/documentation/appkit/nsworkspace/activespacedidchangenotification) |
+| Uniform copy, cut, paste and selection | Shared pasteboard plus optional key event monitoring/remapping | Clipboard storage is shared; command interpretation belongs to the target app or control. Global remapping can cover selected shortcuts but cannot guarantee that menu actions, selection models, terminal protocols, and custom editors have equivalent meaning. An iTerm2-specific issue needs a reproducible case before assigning a policy. [Pasteboard](https://developer.apple.com/documentation/appkit/nspasteboard), [AppKit editing actions](https://developer.apple.com/documentation/appkit/nstext/paste(_:)), [event taps](https://developer.apple.com/documentation/coregraphics/cgevent/tapcreate(tap:place:options:eventsofinterest:callback:userinfo:)) |
+
+## Privileges and system boundaries
+
+Accessibility permission is necessary for broad cross-app UI control. A passive pointer observer may use event taps; keyboard monitoring or event modification carries additional privacy/permission implications, and a HID-entry event tap specifically requires root. Root access does **not** confer a public API for replacing the WindowServer policy or controlling arbitrary window z-order. [Event tap rules](https://developer.apple.com/documentation/coregraphics/cgevent/tapcreate(tap:place:options:eventsofinterest:callback:userinfo:)).
+
+Private WindowServer/SkyLight calls might expose ordering or Space operations, but they are undocumented and can change across macOS releases. Modifying or replacing protected system components would conflict with the ordinary SIP-protected distribution model. Neither path should be a dependency of the primary product. This is a risk assessment, not a claim that a particular private call has been validated. [Apple SIP guidance](https://developer.apple.com/documentation/security/disabling_and_enabling_system_integrity_protection).
+
+Replacing Finder or Dock presentation would not replace AppKit's event dispatch or WindowServer's control of native app windows. A custom desktop shell could own its own UI, but offers no supported route to make independent cross-app focus and z-order system policy. A hybrid user-space architecture is therefore the practical choice.
+
+## Proposed architecture
+
+One menu-bar process owns policy and user configuration; a login item starts it for each user session. Keep the implementation modular inside that service:
+
+1. **Observation:** display topology, workspace/app lifecycle, window metadata, AX notifications, pointer location, and permission state.
+2. **Model:** normalized display regions and window records; distinguish observed state from requested state and track failed operations.
+3. **Policy engine:** declarative rules for app-to-region placement, region maximize, restoration, pointer dwell, and explicit exclusions for modal, floating, full-screen, and transient windows.
+4. **Executor:** serialized AX position/size/focus requests with timeouts and post-action verification. Never spin trying to override an app that resists a policy.
+5. **Configuration UI and diagnostics:** region editor, per-policy switches, permission setup, and an inspectable event log explaining why a window was or was not managed.
+
+Keep input remapping outside the initial critical path. Any later shortcut policy should be opt-in and narrowly scoped, because synthetic input and app-specific command semantics can cause data loss.
+
+## Proof-of-concept plan and decision gates
+
+1. **Measure the focus boundary:** on the current macOS release, use two overlapping AppKit windows from separate apps plus Safari, Finder, and iTerm2. Record pointer entry and clicks on exposed content and decorations of lower windows, activation result, keyboard recipient, click result, and z-order. Test same-app and cross-app transitions, background windows, modal dialogs, Spaces, and full-screen windows. **Gate:** content clicks must reach the app and focus it without raising; decoration clicks may raise. A hover-only success is insufficient.
+2. **Build region management:** define a 49-inch monitor as three configurable rectangles within its visible frame. Place windows by bundle ID and provide region maximize. Verify minimum-size constraints, manual overrides, and native full-screen transitions. **Gate:** placement must converge without oscillation or repeated resize fights.
+3. **Test restoration:** unplug/replug a display, change resolution, switch Spaces, quit/relaunch apps, and restart the service. Record exact and fallback matches. **Gate:** no off-screen windows and no unintended moves of transient windows.
+4. **Investigate input separately:** document exact iTerm2 shortcuts, menu actions, selected content, and pasteboard types before proposing a cross-app policy. **Gate:** do not claim uniform semantics unless representative apps produce identical outcomes.
+
+## Product decision
+
+Proceed if the product can be described as a **central policy controller for manageable native windows**, with best-effort focus and explicit exceptions. If independent keyboard focus, activation, and z-order across every native app is non-negotiable, stop before building: that target requires operating-system support Apple does not expose through public APIs.
