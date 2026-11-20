@@ -4,6 +4,15 @@ A Swift/macOS menu bar proof of concept for the focus boundary in [FEASIBILITY.m
 
 Licensed under the [MIT License](LICENSE).
 
+## 30-second demo
+
+1. Open two overlapping app windows, leaving part of the lower window visible.
+2. From the ZOrderly menu, select **Configure → Focus follows mouse**, turn **Raise on content click** off, and choose **Start**.
+3. Move the pointer into the exposed part of the lower window and type a harmless character. It should receive keyboard input while the overlapping window stays in front.
+4. Click a control in that lower window's content. The click should act without raising the window; a title-bar click may still raise it.
+
+This is an experimental cross-app behavior. Grant Accessibility access if the menu reports it is required.
+
 ## Homebrew preview
 
 On Apple Silicon with macOS 13 or later, install the unnotarized `v0.1.0` preview from the [ZOrderly tap](https://github.com/rszabo50/homebrew-zorderly):
