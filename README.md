@@ -6,7 +6,11 @@ Licensed under the [MIT License](LICENSE).
 
 ## GitHub Actions and releases
 
-The **Build** workflow compiles and verifies an ad hoc signed app on pushes to `main` and pull requests. A tag such as `v0.1.0` starts **Release** on an Apple Silicon macOS runner. Release imports a Developer ID Application certificate, builds with the tag's version, notarizes and staples the app, then publishes `ZOrderly-0.1.0-macos-arm64.zip` and its SHA-256 file. It will not publish if signing or notarization fails. This first release workflow targets Apple Silicon only.
+The **Build** workflow compiles and verifies an ad hoc signed app on pushes to `main` and pull requests. A version tag such as `v0.1.0` identifies the source for a release. Both release workflows run manually from GitHub Actions and target Apple Silicon only.
+
+Without an Apple Developer ID, run **Unnotarized Preview** with an existing tag. It attaches a clearly named `ZOrderly-0.1.0-macos-arm64-UNNOTARIZED.zip` and SHA-256 file to that tag's GitHub release, marks it as a prerelease, and adds a disclosure to the release notes. macOS may block the downloaded app until the user explicitly approves it in Privacy & Security. This preview cannot meet the Gatekeeper requirement for Homebrew's official cask repository.
+
+With an Apple Developer ID, run **Release** with an existing tag. It imports a Developer ID Application certificate, builds with the tag's version, notarizes and staples the app, then publishes `ZOrderly-0.1.0-macos-arm64.zip` and its SHA-256 file. It will not publish if signing or notarization fails.
 
 Before pushing a release tag, add these repository secrets under **Settings → Secrets and variables → Actions**:
 
@@ -19,7 +23,7 @@ Before pushing a release tag, add these repository secrets under **Settings → 
 | `APPLE_NOTARY_KEY_ID` | App Store Connect API key ID |
 | `APPLE_NOTARY_ISSUER_ID` | App Store Connect API issuer ID |
 
-Apple Developer Program access is required to obtain the certificate and notary credentials. Keep the `.p12`, `.p8`, passwords, and their base64 encodings out of Git. Once the secrets are configured, create and push a version tag:
+Apple Developer Program access is required to obtain the certificate and notary credentials. Keep the `.p12`, `.p8`, passwords, and their base64 encodings out of Git. Create and push a version tag before starting either release workflow:
 
 ```sh
 git tag v0.1.0

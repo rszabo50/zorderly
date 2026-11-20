@@ -1,0 +1,52 @@
+name: Unnotarized Preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to package as an unnotarized preview
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Validate tag and build preview
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Tag must be vMAJOR.MINOR.PATCH'; exit 1; }
+          version="${TAG#v}"
+          APP_VERSION="$version" zsh scripts/build-app.sh
+          codesign --verify --deep --strict .build/ZOrderly.app
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' .build/ZOrderly.app/Contents/Info.plist)" = "$version"
+          archive="ZOrderly-${version}-macos-$(uname -m)-UNNOTARIZED.zip"
+          ditto -c -k --keepParent .build/ZOrderly.app "$archive"
+          shasum -a 256 "$archive" > "$archive.sha256"
+          echo "PREVIEW_ARCHIVE=$archive" >> "$GITHUB_ENV"
+      - name: Mark release as an unnotarized preview and upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          notes="$RUNNER_TEMP/zorderly-release-notes.md"
+          {
+            echo '> **Unnotarized preview:** This app is ad hoc signed, not Developer ID signed or Apple notarized. macOS may block its first launch. Use only if you trust this project and understand the security prompt.'
+            echo
+            gh release view "$TAG" --json body --jq .body
+          } > "$notes"
+          gh release edit "$TAG" --prerelease --notes-file "$notes"
+          gh release upload "$TAG" "$PREVIEW_ARCHIVE" "$PREVIEW_ARCHIVE.sha256"
