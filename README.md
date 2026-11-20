@@ -4,6 +4,28 @@ A Swift/macOS menu bar proof of concept for the focus boundary in [FEASIBILITY.m
 
 Licensed under the [MIT License](LICENSE).
 
+## GitHub Actions and releases
+
+The **Build** workflow compiles and verifies an ad hoc signed app on pushes to `main` and pull requests. A tag such as `v0.1.0` starts **Release** on an Apple Silicon macOS runner. Release imports a Developer ID Application certificate, builds with the tag's version, notarizes and staples the app, then publishes `ZOrderly-0.1.0-macos-arm64.zip` and its SHA-256 file. It will not publish if signing or notarization fails. This first release workflow targets Apple Silicon only.
+
+Before pushing a release tag, add these repository secrets under **Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+| --- | --- |
+| `APPLE_CERTIFICATE_P12_BASE64` | Base64 encoding of the exported Developer ID Application `.p12` certificate and private key |
+| `APPLE_CERTIFICATE_PASSWORD` | Export password for that `.p12` file |
+| `APPLE_DEVELOPER_ID` | Full signing identity, for example `Developer ID Application: Name (TEAMID)` |
+| `APPLE_NOTARY_KEY_P8_BASE64` | Base64 encoding of the App Store Connect API `.p8` key |
+| `APPLE_NOTARY_KEY_ID` | App Store Connect API key ID |
+| `APPLE_NOTARY_ISSUER_ID` | App Store Connect API issuer ID |
+
+Apple Developer Program access is required to obtain the certificate and notary credentials. Keep the `.p12`, `.p8`, passwords, and their base64 encodings out of Git. Once the secrets are configured, create and push a version tag:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ## Build and run
 
 Requires macOS 13 or later and the Swift command line tools.

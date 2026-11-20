@@ -10,9 +10,14 @@ sdk_path="${SDKROOT:-$(xcrun --show-sdk-path)}"
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources" "$iconset_dir" "$PWD/.build/module-cache"
 
 SDKROOT="$sdk_path" CLANG_MODULE_CACHE_PATH="$PWD/.build/module-cache" \
-    swiftc -swift-version 5 Sources/ZOrderly/main.swift -o "$app_dir/Contents/MacOS/ZOrderly"
+    swiftc -swift-version 5 -target "$(uname -m)-apple-macos13.0" \
+    Sources/ZOrderly/main.swift -o "$app_dir/Contents/MacOS/ZOrderly"
 
 cp App/Info.plist "$app_dir/Contents/Info.plist"
+if [[ -n "${APP_VERSION:-}" ]]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" "$app_dir/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APP_VERSION" "$app_dir/Contents/Info.plist"
+fi
 cp Assets/ZOrderly.png "$app_dir/Contents/Resources/ZOrderly.png"
 
 make_icon() {
@@ -31,6 +36,14 @@ make_icon 512 icon_512x512.png
 make_icon 1024 icon_512x512@2x.png
 
 python3 scripts/make-icns.py "$iconset_dir" "$app_dir/Contents/Resources/ZOrderly.icns"
-codesign --force --sign - --timestamp=none "$app_dir"
+if [[ -n "${SIGN_IDENTITY:-}" ]]; then
+    sign_args=(--force --options runtime --timestamp --sign "$SIGN_IDENTITY")
+    if [[ -n "${SIGN_KEYCHAIN:-}" ]]; then
+        sign_args+=(--keychain "$SIGN_KEYCHAIN")
+    fi
+    codesign "${sign_args[@]}" "$app_dir"
+else
+    codesign --force --sign - --timestamp=none "$app_dir"
+fi
 
 print "$app_dir"
