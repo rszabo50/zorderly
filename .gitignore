@@ -1,4 +1,5 @@
 .build/
+dist/
 window-focus-probe
 window-focus-probe-new
 /zorderly

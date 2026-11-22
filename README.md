@@ -31,7 +31,18 @@ Without an Apple Developer ID, run **Unnotarized Preview** with an existing tag.
 
 With an Apple Developer ID, run **Release** with an existing tag. It imports a Developer ID Application certificate, builds with the tag's version, notarizes and staples the app, then publishes `ZOrderly-0.1.0-macos-arm64.zip` and its SHA-256 file. It will not publish if signing or notarization fails.
 
-Before pushing a release tag, add these repository secrets under **Settings → Secrets and variables → Actions**:
+### Local signed release
+
+The same release can be built on this Mac without GitHub Actions secrets. Import a Developer ID Application certificate **with its private key** and Apple's [Developer ID G2 intermediate](https://www.apple.com/certificateauthority/), then confirm `security find-identity -v -p codesigning` lists a valid identity. Store notarization credentials in Keychain once; `notarytool` prompts for the Apple ID app-specific password without putting it in shell history:
+
+```sh
+xcrun notarytool store-credentials zorderly-local --apple-id YOUR_APPLE_ID --team-id YOUR_TEAM_ID
+zsh scripts/release-local.sh 0.1.1
+```
+
+The script signs with hardened runtime, waits for Apple's notarization result, staples and validates the ticket, then writes `dist/ZOrderly-0.1.1-macos-arm64.zip` and its SHA-256 file. `--prepare-only` checks signing without contacting the notary service. To publish through the local `gh` CLI instead of GitHub Actions, commit the source, create and push a new matching tag, then run `zsh scripts/release-local.sh 0.1.1 --publish`. `v0.1.0` is already a published preview; use a new version. Update the separate Homebrew tap's cask version, URL, and SHA-256 after publication. Never put the notarization password or private key in Git.
+
+For the **GitHub Actions Release workflow only**, add these repository secrets under **Settings → Secrets and variables → Actions** before running it:
 
 | Secret | Value |
 | --- | --- |
