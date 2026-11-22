@@ -13,15 +13,15 @@ Licensed under the [MIT License](LICENSE).
 
 This is an experimental cross-app behavior. Grant Accessibility access if the menu reports it is required.
 
-## Homebrew preview
+## Homebrew
 
-On Apple Silicon with macOS 13 or later, install the unnotarized `v0.1.0` preview from the [ZOrderly tap](https://github.com/rszabo50/homebrew-zorderly):
+On Apple Silicon with macOS 13 or later, install the Developer ID signed and notarized `v0.1.1` release from the [ZOrderly tap](https://github.com/rszabo50/homebrew-zorderly):
 
 ```sh
 brew install --cask rszabo50/zorderly/zorderly
 ```
 
-This is a third-party tap. The cask checks the release archive's SHA-256 and installs the app into Applications. macOS may require first-launch approval in Privacy & Security and Accessibility access for focus behavior. The preview is not eligible for Homebrew's official cask repository.
+This is a third-party tap. The cask checks the release archive's SHA-256 and installs the app into Applications. Grant Accessibility access for focus behavior when macOS requests it.
 
 ## GitHub Actions and releases
 
